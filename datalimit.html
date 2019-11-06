@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流量阈值设置</title>
+    <link rel="shortcut icon" href="favicon.ico"> 
+    <link href="__PUBLIC__/css/bootstrap.min.css?v=3.3.6" rel="stylesheet">
+    <link href="__PUBLIC__/fonts/css/font-awesome.min.css?v=4.4.0" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="__PUBLIC__/css/plugins/ionRangeSlider/normalize.css">
+    <link rel="stylesheet" type="text/css" href="__PUBLIC__/css/plugins/ionRangeSlider/ion.rangeSlider.css">
+    <link rel="stylesheet" type="text/css" href="__PUBLIC__/css/plugins/ionRangeSlider/ion.rangeSlider.skinFlat.css">
+    <link rel="stylesheet" type="text/css" href="__PUBLIC__/css/style.css?v=4.1.0"> 
+    <link rel="stylesheet" type="text/css" href="__PUBLIC__/css/common.css" />
+    <link rel="stylesheet" type="text/css" href="__PUBLIC__/css/datalimit.css" />
+
+    <script type="text/javascript" src="__PUBLIC__/js/jquery.min.js?v=2.1.4"></script>  
+    <script type="text/javascript" src="__PUBLIC__/js/plugins/ionRangeSlider/ion.rangeSlider.js"></script> 
+    <script type="text/javascript" src="__PUBLIC__/js/checkbox.js"></script>
+    <script type="text/javascript" src="__PUBLIC__/js/common.js"></script>
+    <script type="text/javascript" src="__PUBLIC__/js/plugins/layer/layer.min.js"></script>
+    <style>
+        .upload-block {
+            height: 270px;
+        }
+        .upload-block-stop {
+            height: 270px;
+        }
+        .datalimit-edit {
+            height: 220px;
+        }
+    </style>
+
+    <script type="text/javascript">
+        $(document).ready(function(){
+        	
+            $('#btn-reset').click(function(event) {
+                $('.search-inline-block input').val('');
+                $('.search-inline-block select').each(function(index, el) {
+                    $(this).find('option:first').prop("selected", 'selected'); 
+                });
+            });
+			
+            $(".btn-cancel").click(function(event) {
+                hideMaskLayer();
+                $(".edit-block").hide();
+                $(".upload-block").hide();
+                $(".upload-block-stop").hide();
+            });
+			
+            $(".close").click(function(event) {
+                hideMaskLayer();
+                $(".edit-block").hide();
+                $(".upload-block").hide();
+                $(".upload-block-stop").hide();
+            });
+            
+            $(".ionrange_datalimit").ionRangeSlider({
+                type: "single",
+                min: 50,
+                max: 100,
+                postfix: "%",
+                from: 50,
+                keyboard: true
+            });
+            
+            $(".nonnegative").change(function(event){
+            	var testReg = /^\d+$/;
+            	var inputVal = $(this).val();
+            	if(inputVal && (inputVal == "-" || !testReg.test(inputVal))){
+                    layer.msg('请设置不小于0的  最大允许超出流量！');                    
+                    $(this).val('0');
+                }
+            });
+            
+          //获取当前表格中选中项的id数组
+        	function getSelectionIds(){
+        	    var idArr = [];
+        	    $(".table tbody").find(':checkbox:checked').each(function(key,value){   
+        	        idArr.push($(this).val());
+        	    });
+        	    return idArr;
+        	}
+            
+            //修改按钮
+            $("#btn-set").click(function(event) {
+            	var ids = getSelectionIds();
+             	if(ids == ''){
+            		layer.msg("请选择您要设置的设备选项！");
+            	}else{
+                	showMaskLayer();
+           			$('.edit-block').show();
+            	}
+            });
+            
+            //确认修改按钮
+            $("#btn-saveSet").click(function(event) {
+            	var ids = getSelectionIds();
+            	var flowWarning = ($("#flowWarning").is(':checked'))?1:0;  //是否启用 流量阈值
+            	var threshold = parseInt($("#threshold").val()); //流量阈值
+            	var autoDisable = ($("#autoDisable").is(':checked'))?1:0; //是否启用 达量断网
+            	var peakThreshold = parseInt($("#peakThreshold").val())?parseInt($("#peakThreshold").val()):0;  //最大允许超出流量  
+            	            	
+            	if(autoDisable == 1 && !peakThreshold){
+            		layer.msg("请设置最大允许超出流量！");          		
+            	}else if(peakThreshold < 0){
+            		layer.msg("请设置不小于0的  最大允许超出流量！");   
+            	}else{
+            		$.ajax({
+                 	      type: "POST",
+                 	      url: "{:\\think\\Url::build('customer/updateThreshold')}",
+                 	      dataType: "json",
+                 	      data:{iccIdList:ids, flowWarning:flowWarning, threshold:threshold, autoDisable:autoDisable, peakThreshold:peakThreshold},
+                 	      success: function(json){
+                 	          if(json.success){                 	        	  
+                 	        	  layer.msg(json.msg?json.msg:'设置成功！');
+                 	        	  endLoading();
+                 	        	  setTimeout(function () {
+                 	        			hideMaskLayer();
+                                        window.location.reload();
+                 	        		}, 1000);                 	        	  
+                 	          }else{
+                 	        	 endLoading();
+            		        	 layer.msg(json.msg?json.msg:'设置失败！', {
+                            		  time: 0 //不自动关闭
+                            		  ,btn: ['确认']
+                            		  ,yes: function(index){
+                           		    	 layer.close(index);
+                            		  }
+                            	 });
+            		       	     return false;
+                 	          }
+                 	      }
+                 	  });	
+            	}
+            });
+            
+            //批量设置按钮
+            $("#btn-upload").click(function(event) {
+                showMaskLayer();
+                $(".upload-block").show();
+            });
+            
+            //批量设置确认按钮 
+            $(".btn-upload-save").click(function(event) {
+            	
+            	if ($("#file-upload").val() == '') {
+            		layer.msg('请选择您要上传的文件！', function(){});
+            	} else {
+            		
+            		var oper = "updateThresholdBatch";
+                	var flowWarning = ($("#flowWarning_branch").is(':checked'))?1:0;  //是否启用 流量阈值
+                	var threshold = parseInt($("#threshold_branch").val()); //流量阈值
+                	var autoDisable = ($("#autoDisable_branch").is(':checked'))?1:0; //是否启用 达量断网
+                	var peakThreshold = parseInt($("#peakThreshold_branch").val());  //最大允许超出流量  
+                	
+                	if(autoDisable == 1 && !peakThreshold){
+                		layer.msg("请设置最大允许超出流量！");          		
+                	}else if(peakThreshold < 0){
+                		layer.msg("请设置不小于0的  最大允许超出流量！");   
+                	}else{           		
+	            		startLoading();
+	            		var fd = new FormData();
+	            		fd.append("oper", oper);
+		        		fd.append("flowWarning", flowWarning);
+		        		fd.append("threshold", threshold);
+		        		fd.append("autoDisable", autoDisable);
+		        		fd.append("peakThreshold", peakThreshold);
+	            		fd.append("upload", 1);
+	            		fd.append("upfile", $("#file-upload").get(0).files[0]);
+	            		$.ajax({
+	            			url: "{:\\think\\Url::build('customer/operBranch')}",
+	            			type: "POST",
+	            			processData: false,
+	            			contentType: false,
+	            			data: fd,
+	            			dataType: 'json',
+	            			success: function(json) {        				
+	            				if(json.success){
+		            		    	  layer.msg('操作成功！');
+		            		    	  endLoading();
+		            		    	  setTimeout(function () {
+		            		    		    hideMaskLayer();
+                                            window.location.reload();
+		            		    		}, 1000);
+	            		         }else{
+	                   		    	 endLoading();
+	            		        	 layer.msg(json.msg?json.msg:"操作失败！", {
+	                            		  time: 0 //不自动关闭
+	                            		  ,btn: ['确认']
+	                            		  ,yes: function(index){
+	                           		    	layer.close(index);
+	                            		  }
+	                            	 });
+	            		       	     return false;
+	            		         }
+	            			},
+	            			error: function(e){
+	            				layer.msg('操作异常！');
+	          		    	  	endLoading();
+	            			}            			
+	            		});
+                	}
+            	}
+            });
+
+
+            //批量设置按钮
+            $("#btn-upload-stop").click(function(event) {
+                showMaskLayer();
+                $(".upload-block-stop").show();
+            });
+
+
+        });
+    </script> 
+</head>
+<body class="gray-bg">
+    <div class="wrapper wrapper-content animated fadeInRight">
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="ibox float-e-margins"> 
+                    <div class="ibox-content">  
+                        <div class="header-content">
+                            <i class="fa fa-user fa-lg"></i><strong> 功能管理 > 流量阈值设置</strong>
+                        </div>
+                        <div class="divider"></div>
+                        <form action="" id="form1" method="post">
+                            <div class="search-content">
+                                <div class="form-block">
+                                    <div class="search-inline-block">
+                                        <label>ICCID起始：</label>
+                                        <input type="text" name="iccIdStart" id="iccIdStart" value="{$Request.param.iccIdStart}" placeholder="输入19或20位编码"/>
+                                    </div>
+                                    <div class="search-inline-block">
+                                        <label>ICCID终止：</label>
+                                        <input type="text" name="iccIdEnd" id="iccIdEnd" value="{$Request.param.iccIdEnd}" placeholder="输入19或20位编码" />
+                                    </div>
+                                    <div class="search-inline-block">
+                                        <label>运营商类别：</label>
+                                        <select name="telcomType" class="chosen-select">
+                                            <option value="" {eq name="$Request.param.telcomType" value=""}selected{/eq}>--全部--</option>
+                                            <option value="0" {eq name="$Request.param.telcomType" value="0"}selected{/eq}>中国电信</option>
+                                            <option value="1" {eq name="$Request.param.telcomType" value="1"}selected{/eq}>中国移动</option>
+                                            <option value="2" {eq name="$Request.param.telcomType" value="2"}selected{/eq}>中国联通</option>
+                                        </select>
+                                    </div>
+                                    <div class="search-inline-block">
+                                        <label>归属部门：</label>
+                                        <select name="usingOrgId" class="chosen-select">
+                                            <option value="" {eq name="$Request.param.usingOrgId" value="0"}selected{/eq}>--全部--</option>
+                                            {volist name="org" id="orgInfo"}
+                                        		<option value="{$orgInfo.orgId}" {eq name="$Request.param.usingOrgId" value="$orgInfo.orgId"}selected{/eq}>{$orgInfo.name}</option>
+                                       		{/volist}
+                                        </select>
+                                    </div>
+                                    <div class="search-inline-block">
+                                        <label>预警状态：</label>
+                                        <select name="flowWarning" class="chosen-select">
+                                            <option value="" {eq name="$Request.param.flowWarning" value=""}selected{/eq}>--全部--</option>
+                                            <option value="1" {eq name="$Request.param.flowWarning" value="1"}selected{/eq}>启用</option>
+                                            <option value="0" {eq name="$Request.param.flowWarning" value="0"}selected{/eq}>停用</option>
+                                            <option value="-1" {eq name="$Request.param.flowWarning" value="-1"}selected{/eq}>未设置</option>
+                                        </select>
+                                    </div>
+                                    <!--<div class="search-inline-block">
+                                        <label>达量断网状态：</label>
+                                        <select name="autoDisable" class="chosen-select">
+                                            <option value="" {eq name="$Request.param.autoDisable" value=""}selected{/eq}>&#45;&#45;全部&#45;&#45;</option>
+                                            <option value="1" {eq name="$Request.param.autoDisable" value="1"}selected{/eq}>启用</option>
+                                            <option value="0" {eq name="$Request.param.autoDisable" value="0"}selected{/eq}>停用</option>
+                                            <option value="-1" {eq name="$Request.param.autoDisable" value="-1"}selected{/eq}>未设置</option>
+                                        </select>
+                                    </div>-->
+                                    <div class="pull-right">                                
+                                        <button type="button" name="search" class="btn btn-inline-block" id="btn-search" onclick="javascript:topage('1');">
+                                        	<i class="fa fa-search"></i> 查询</button>
+                                        <button type="button" name="reset" class="btn btn-inline-block" id="btn-reset"><i class="fa fa-refresh"></i> 重置</button>
+                                    </div>
+                                </div> 
+                                <div>
+                                    <input type="button" class="btn btn-inline-block" value="修改" id="btn-set" />
+                                    <input type="button" class="btn btn-inline-block" value="模板下载" onclick="window.open('{:\\think\\Url::build('public/', 'files=bindOrNotBranch.xlsx', '')}')" />
+                                    <input type="button" class="btn btn-inline-block" value="批量设置" id="btn-upload" />
+                                    <input type="button" class="btn btn-inline-block" value="批量设置停用值" id="btn-upload-stop" />
+                                </div>   
+                            </div>
+                            <input type="hidden" name="page" id="page" value="{$Request.param.page}" />
+                            <input type="hidden" name="pageSize" id="pageSize" value="{$Request.param.pageSize}" />
+                        </form>
+                    </div>
+                </div>
+            </div>            
+        </div>
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="float-e-margins">
+                    <div class="ibox-content text-center table-responsive">
+                        <table class="table table-bordered table-hover">
+                            <thead>
+                                <tr>
+                                	<th><input type="checkbox" group="ids" class="checkboxCtrl"></th>
+                                    <th>ICCID</th>
+                                    <th>MSISDN</th>
+                                    <th>IMEI</th>
+                                    <th>运营商类别</th>
+                                    <th>归属部门</th>
+                                    <th>预警提示</th>
+                                    <th>流量阈值</th>
+                                    <!--<th>超出达量断网</th>
+                                    <th>允许超出最大流量</th>-->
+                                    <th>操作时间</th>
+                                    <th>操作员</th>
+                                </tr>                                
+                            </thead>
+                            <tbody>
+                           		{volist name="list" id="list"}
+                                <tr>
+                                	<td><input name="ids" value="{$list.iccId}" type="checkbox"></td>
+                                    <td>{$list.iccId}</td>
+                                    <td>{$list.msisdn}</td>
+                                    <td>{$list.imei}</td>
+                                    <td>
+                                    {switch name="list.telcomType"}
+                                        {case value="1"}中国移动{/case}
+                                        {case value="2"}中国联通{/case}
+                                        {case value="0"}中国电信{/case}
+                                        {default /}未知
+                                    {/switch}
+                                    </td>
+                                    <td>{$list.usingOrgName}</td>
+                                    <td>
+                                    {switch name="list.flowWarning"}
+                                        {case value="0"}停用{/case}
+                                        {case value="1"}启用{/case}
+                                        {default /}未设置
+                                    {/switch}
+                                    </td>
+                                    <td>{$list.threshold}%</td>
+                                    <!--<td>
+                                    {switch name="list.autoDisable"}
+                                        {case value="0"}停用{/case}
+                                        {case value="1"}启用{/case}
+                                        {default /}未设置
+                                    {/switch}
+                                    </td>
+                                    <td>
+                                    {switch name="list.autoDisable"}
+                                        {case value="1"}{$list.peakThreshold}M{/case}
+                                        {default /}未设置
+                                    {/switch}
+									</td>-->
+                                    <td>{$list.operTime}</td>
+                                    <td>{$list.operatorName}</td>
+                                </tr>
+                                {/volist}
+                            </tbody>
+                        </table>
+                        {include file="templates/page" /}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 流量阈值设置 -->
+    <div class="edit-block modal-block datalimit-edit">
+        <div class="modal-bg"></div>
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-label="关闭">
+                <span aria-hidden="true">×</span>
+            </button>
+            <h4 class="modal-title"><i class="fa fa-th-large"></i> 流量阈值设置</h4>
+        </div>
+        <div class="modal-body text-left"> 
+        	<div class="col-sm-12"> 
+                 <span>*</span>   
+                 <label for="flowWarning"><input type="checkbox" id="flowWarning" /> 流量阈值：</label>        	
+				<div class="ionrange-group"> 
+			        <input type="text" class="ionrange_datalimit" id="threshold" />   
+				</div>
+        	</div>           
+           <!-- <div class="col-sm-12 form-inline">
+                 <span>*</span>
+                 <label for="autoDisable"><input type="checkbox" id="autoDisable" /> 允许超出最大流量：</label>
+               	 <div class="input-group">
+		            <input type="number" class="form-control nonnegative" step="1" min="0" id="peakThreshold" />
+		            <span class="input-group-addon">M</span>
+		        </div>
+        	</div>  -->
+            <div class="clearfix"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-save" id="btn-saveSet"><i class="fa fa-folder"></i> 确认</button>
+            <button type="button" class="btn btn-cancel" data-dismiss="modal"><i class="fa fa-close"></i> 取消</button>
+        </div>    
+    </div>
+ 
+    <!-- 上传附件 --> 
+    <div class="upload-block modal-block">
+        <div class="modal-bg"></div>
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-label="关闭">
+                <span aria-hidden="true">×</span>
+            </button>
+            <h4 class="modal-title"><i class="fa fa-th-large"></i> 批量设置</h4>
+        </div>
+        <div class="modal-body text-left">
+            <div class="col-sm-12">
+                <span>*</span>
+                <label>上传文件：</label>
+                <input type="file" name="file" id="file-upload" onChange="UploadFile('file-upload');"  /> 
+            </div>
+	       	<div class="col-sm-12"> 
+	                <span>*</span>   
+	                <label for="flowWarning_branch"><input type="checkbox" id="flowWarning_branch"/> 流量阈值：</label>        	
+				<div class="ionrange-group"> 
+			        <input type="text" class="ionrange_datalimit" id="threshold_branch" />   
+				</div>
+	       	</div>           
+           <!-- <div class="col-sm-12 form-inline">
+                <span>*</span>
+                <label for="autoDisable_branch"><input type="checkbox" id="autoDisable_branch"/> 允许超出最大流量：</label>
+              	<div class="input-group">
+		            <input type="number" class="form-control nonnegative" step="1" min="0" id="peakThreshold_branch" />
+		            <span class="input-group-addon">M</span>
+		        </div>
+	       	</div>         	-->
+            <div class="clearfix"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-upload-save"><i class="fa fa-folder"></i> 确认</button>
+            <button type="button" class="btn btn-cancel" data-dismiss="modal"><i class="fa fa-close"></i> 取消</button>
+        </div>    
+    </div>
+
+    <!-- 上传附件 设置停用值--> 
+    <div class="upload-block  upload-block-stop modal-block">
+        <div class="modal-bg"></div>
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-label="关闭">
+                <span aria-hidden="true">×</span>
+            </button>
+            <h4 class="modal-title"><i class="fa fa-th-large"></i> 批量设置停用值</h4>
+        </div>
+        <div class="modal-body text-left">
+            <div class="col-sm-12">
+                <span>*</span>
+                <label>上传文件：</label>
+                <input type="file" name="file" id="file-upload" onChange="UploadFile('file-upload');"  /> 
+            </div>
+            <div class="col-sm-12"> 
+                <span>*</span>   
+                <label for="flowWarning_branch"> 流量停用值：</label>        	
+                <div class="ionrange-group"> 
+                    <input type="text" class="" id="" />   
+                </div>
+           </div>         
+           
+            <div class="clearfix"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-upload-save"><i class="fa fa-folder"></i> 确认</button>
+            <button type="button" class="btn btn-cancel" data-dismiss="modal"><i class="fa fa-close"></i> 取消</button>
+        </div>    
+    </div>
+
+    <!-- 遮罩层 -->
+    <div class="maskLayer"></div>
+</body>
+</html>
